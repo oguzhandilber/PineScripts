@@ -1,0 +1,68 @@
+//@version=4
+
+// Added Alerting to @ProfitProgrammers Vortex Trend Tracker 2.0 + RSI Script
+
+study("Vortex Trend Tracker 2.0 + RSI")
+
+//          INPUT VARIABLES FOR VORTEX: 
+vortexLen = input(30, title="Length for Vortex", minval=1)
+emaLen = input(10, title="Length of Positive and Negative EMA's", type=input.integer, minval=1)
+colorBars = input(true, title="Color Price Bars Based on Vortex?")
+plotVLines = input(true, title="Plot VI+ and VI- Lines?")
+//          RSI INPUTS:
+rsiSrc = input(close, title="RSI Source")
+lenSlowRSI = input(29, title="Length of Slow RSI", type=input.integer, minval=1)
+lenFastRSI = input(9, title="Length of Fast RSI", type=input.integer, minval=1)
+plotRSI = input(false, title="Plot RSI Lines?")
+//          VORTEX CALCULATION:
+//Returns positive and negative trendlines. 
+vortex(posSum, negSum, vLen)=>
+    tRange = sum(atr(1), vLen)
+    vmPlus = posSum / tRange
+    vmNeg = negSum / tRange
+    [vmPlus, vmNeg]
+
+[vPlus, vNeg] = vortex(sum(abs(high - low[1]), vortexLen), sum(abs(low - high[1]), vortexLen), vortexLen)
+plusEMA = ema(vPlus, emaLen)
+negEMA = ema(vNeg, emaLen)
+vDiff = abs(plusEMA - negEMA)
+
+//          RSI CALCULATION: 
+fastSlow(fastLen, slowLen, s0, s1)=>
+    fast = rsi(s0, fastLen)
+    slow = rsi(s1, slowLen)
+    [fast, slow]
+    
+[fastRSI, slowRSI] = fastSlow(lenFastRSI, lenSlowRSI, rsiSrc, rsiSrc)
+[fastRSI1, slowRSI1] = fastSlow(round(lenFastRSI/2), round(lenSlowRSI/2), rsiSrc, rsiSrc)
+
+
+//          PLOTTING:
+var color vColor = na
+vColor := plusEMA > negEMA and plusEMA >= plusEMA[1] ? #1b5e20 : plusEMA > negEMA and plusEMA < plusEMA[1] ? #a5d6a7 : negEMA >= plusEMA and negEMA > negEMA[1] ? #b71c1c : negEMA > plusEMA and negEMA < negEMA[1] ? #c76a72 : nz(vColor[1])
+v0 = plot(vDiff, style=plot.style_histogram, color=vColor, linewidth=2, transp=0)
+plot(plotVLines ? plusEMA : na, title="VI +", color=color.green, linewidth=2)
+plot(plotVLines ? negEMA : na, title="VI -", color=color.red, linewidth=2)
+barcolor(colorBars ? vColor : na)
+//  Use conditional in transp param. instead of plot to prevent loss of background fill.
+r0 = plot(fastRSI/100, color=fastRSI > 50 ? color.teal : color.maroon, title="Fast RSI", linewidth=1, transp=plotRSI ? 25 : 100)
+r1 = plot(slowRSI/100, color=slowRSI > 50? color.green : color.red, title="Slow RSI", linewidth=1, transp = plotRSI ? 25 : 100)
+r2 = plot(fastRSI1/100, color=fastRSI1 > 50 ? color.lime : color.fuchsia, title="Fast RSI 2", linewidth=1, transp=plotRSI ? 25 : 100)
+r3 = plot(slowRSI1/100, color=slowRSI1 > 50 ? color.lime : color.red, title="Slow RSI 2", linewidth=1, transp = plotRSI ? 25 : 100)
+fill(r0, v0, color=fastRSI >= 50 ? color.green : color.red, title="Fill 0")
+fill(r1, v0, color=slowRSI >= 50 ? color.teal : color.fuchsia)
+fill(r0, r1, color=fastRSI > slowRSI ? color.lime : fastRSI < slowRSI ? color.maroon : na, transp=80,title="Intra-RSI Fill")
+fill(r2, v0, color=fastRSI1 > slowRSI1 ? #00ff00 : #ec407a, transp=90)
+
+//Alerts
+long = cross(plusEMA, negEMA) and (plusEMA > negEMA)
+short = cross(plusEMA, negEMA) and (plusEMA < negEMA)
+
+//plotshape(long ? 1:0, "BUY NOW", color=color.lime, transp=0, size=size.tiny, style=shape.triangleup, location=location.belowbar)
+//plotshape(short ? 1:0, "SELL NOW", color=color.red, transp=0, size=size.tiny, style=shape.triangledown, location=location.abovebar)
+
+bgcolor(long==1 ? color.lime : na, title="BUY NOW", transp=30)
+bgcolor(short==1 ? color.red : na, title="SELL NOW", transp=30)
+
+alertcondition(condition=cross(plusEMA, negEMA) and (plusEMA > negEMA), title="BUY ALERT", message="BUY ALERT")
+alertcondition(condition=cross(plusEMA, negEMA) and (plusEMA < negEMA), title="SELL ALERT", message="SELL ALERT")

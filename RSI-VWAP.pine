@@ -1,0 +1,98 @@
+
+//@version=4
+strategy("RSI-VWAP INDICATOR", overlay=false, initial_capital = 1000, currency = "USD", pyramiding = 3, commission_type=strategy.commission.percent, commission_value=0.07, default_qty_type = strategy.percent_of_equity, default_qty_value = 100)
+
+/// TREND
+ribbon_period = input(14, "Period", step=1)
+
+leadLine1 = ema(close, ribbon_period)
+leadLine2 = sma(close, ribbon_period)
+
+p1 = plot(leadLine1, color= #53b987, title="EMA", transp = 50, linewidth = 1)
+p2 = plot(leadLine2, color= #eb4d5c, title="SMA", transp = 50, linewidth = 1)
+fill(p1, p2, transp = 60, color = leadLine1 > leadLine2 ? #53b987 : #eb4d5c)
+
+// Initial inputs
+Act_RSI_VWAP_long = input(true, "RSI VOLUME WEIGHTED AVERAGE PRICE LONG")
+RSI_VWAP_length_long = input(15, "RSI-VWAP LENGTH LONG")
+RSI_VWAP_overSold_long = input(15, "RSI-VWAP OVERSOLD LONG", type=input.float)
+RSI_VWAP_overBought_long = input(72, "RSI-VWAP OVERBOUGHT LONG", type=input.float)
+
+Act_RSI_VWAP_short = input(true, "RSI VOLUME WEIGHTED AVERAGE PRICE SHORT")
+RSI_VWAP_length_short = input(14, "RSI-VWAP LENGTH SHORT")
+RSI_VWAP_overSold_short = input(8, "RSI-VWAP OVERSOLD SHORT", type=input.float)
+RSI_VWAP_overBought_short = input(72, "RSI-VWAP OVERBOUGHT SHORT", type=input.float)
+
+// RSI with VWAP as source
+RSI_VWAP_long = rsi(vwap(close), RSI_VWAP_length_long)
+RSI_VWAP_short = rsi(vwap(close), RSI_VWAP_length_short)
+
+// Plot Them Separately.
+//Plotting LONG, Put overlay=false
+r_long=plot(RSI_VWAP_long, color = RSI_VWAP_long > RSI_VWAP_overBought_long ? color.red : RSI_VWAP_long < RSI_VWAP_overSold_long ? color.lime : color.blue, title="rsi", linewidth=2, style=plot.style_line)
+h1_long=plot(RSI_VWAP_overBought_long, color = color.gray, style=plot.style_stepline)
+h2_long=plot(RSI_VWAP_overSold_long, color = color.gray, style=plot.style_stepline)
+fill(r_long,h1_long, color = RSI_VWAP_long > RSI_VWAP_overBought_long ? color.red : na, transp = 60)
+fill(r_long,h2_long, color = RSI_VWAP_long < RSI_VWAP_overSold_long ? color.lime : na, transp = 60)
+
+// Plotting SHORT, Put overlay=false
+r_short=plot(RSI_VWAP_short, color = RSI_VWAP_short > RSI_VWAP_overBought_short ? color.red : RSI_VWAP_short < RSI_VWAP_overSold_short ? color.lime : color.blue, title="rsi", linewidth=2, style=plot.style_line)
+h1_short=plot(RSI_VWAP_overBought_short, color = color.gray, style=plot.style_stepline)
+h2_short=plot(RSI_VWAP_overSold_short, color = color.gray, style=plot.style_stepline)
+fill(r_short,h1_short, color = RSI_VWAP_short > RSI_VWAP_overBought_short ? color.red : na, transp = 60)
+fill(r_short,h2_short, color = RSI_VWAP_short < RSI_VWAP_overSold_short ? color.lime : na, transp = 60)
+
+
+///////  STRATEGY Take Profit / Stop Loss ////////
+////// LONG //////
+long_tp_inp = input(100, title='Long Take Profit %', step=0.1)/100
+long_sl_inp = input(3.3, title='Long Stop Loss %', step=0.1)/100
+long_trailing = input(100, title='Trailing Stop Long', step=0.1) / 100
+
+long_take_level = strategy.position_avg_price * (1 + long_tp_inp)
+long_stop_level = strategy.position_avg_price * (1 - long_sl_inp)
+
+////// SHORT //////
+short_tp_inp = input(100, title='Short Take Profit %', step=0.1)/100
+short_sl_inp = input(4, title='Short Stop Loss %', step=0.1)/100
+short_trailing = input(100, title='Trailing Stop short', step=0.1) / 100
+
+short_take_level = strategy.position_avg_price * (1 - short_tp_inp)
+short_stop_level = strategy.position_avg_price * (1 + short_sl_inp)
+
+///Strategy_Conditions
+/// LONG ///
+entry_long =crossover(RSI_VWAP_long, RSI_VWAP_overSold_long) and leadLine2<leadLine1
+entry_price_long=valuewhen(entry_long,close,0)
+exit_long =crossunder(RSI_VWAP_long, RSI_VWAP_overBought_long)
+
+/// SHORT ///
+
+entry_short =crossunder(RSI_VWAP_short, RSI_VWAP_overBought_short) and leadLine2>leadLine1
+entry_price_short=valuewhen(entry_short,close,0)
+exit_short =crossover(RSI_VWAP_short, RSI_VWAP_overSold_short)
+
+////// BACKTEST PERIOD ///////
+testStartYear = input(2019, "Backtest Start Year")
+testStartMonth = input(1, "Backtest Start Month")
+testStartDay = input(1, "Backtest Start Day")
+testPeriodStart = timestamp(testStartYear,testStartMonth,testStartDay,0,0)
+
+testStopYear = input(2020, "Backtest Stop Year")
+testStopMonth = input(12, "Backtest Stop Month")
+testStopDay = input(31, "Backtest Stop Day")
+testPeriodStop = timestamp(testStopYear,testStopMonth,testStopDay,0,0)
+
+testPeriod() =>
+    time >= testPeriodStart and time <= testPeriodStop ? true : false
+
+if testPeriod()
+    if strategy.position_size == 0 or strategy.position_size > 0
+        strategy.entry("long", true, when = entry_long, comment="*** INSERT OPEN LONG COMMENT FROM WBT ***")
+        strategy.exit("long", stop=long_stop_level, limit=long_take_level, trail_points=entry_price_long * long_trailing / syminfo.mintick, trail_offset=entry_price_long * long_trailing / syminfo.mintick, comment="*** INSERT CLOSE LONG COMMENT FROM WBT ***")
+        strategy.close("long", when=exit_long, comment = "*** INSERT CLOSE LONG COMMENT FROM WBT ***")
+
+    if strategy.position_size == 0 or strategy.position_size < 0
+        strategy.entry("short", false, when = entry_short, comment="*** INSERT OPEN SHORT COMMENT FROM WBT ***")
+        strategy.exit("TP/SL/TRS_short","short", stop=short_stop_level, limit=short_take_level, trail_points=entry_price_short * short_trailing / syminfo.mintick, trail_offset=entry_price_short * short_trailing / syminfo.mintick, comment = "*** INSERT CLOSE SHORT COMMENT FROM WBT ***")
+        strategy.close("short", when=exit_short, comment = "*** INSERT CLOSE SHORT COMMENT FROM WBT ***")
